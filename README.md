@@ -53,6 +53,18 @@ You can also build on the fluent setters directly:
 <?= $image ?>
 ```
 
+Call `ratio()` to crop every generated width to a fixed aspect ratio, without having to define a named `thumbs.presets.*` entry. It accepts a `'width/height'` string (e.g. the value of a `ratio` field), a `[width, height]` array, or a plain float:
+
+```php
+<?= $page->image()->toResponsiveImage()
+    ->ratio('16/9')
+    ->widths([400, 800, 1200]) ?>
+```
+
+`ratio()` only applies when no named preset is used — once `preset()` is set, the preset's own `thumbs.presets.*`/`thumbs.srcsets.*` configuration takes over completely.
+
+`ratio()` defaults the crop anchor to the file's own focus point (falling back to `center`). Call `crop()` explicitly to pick a different anchor, e.g. `->ratio('16/9')->crop('top')`. `crop()` accepts any of Kirby's own crop values (`'top'`, `'bottom left'`, `true`, `false`, …) and works independently of `ratio()` too.
+
 ## Configuration
 
 Plugin options are read from the `hksagentur.media-kit` config key:

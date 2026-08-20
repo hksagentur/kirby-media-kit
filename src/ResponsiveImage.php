@@ -17,12 +17,14 @@ class ResponsiveImage implements Stringable
     protected File|Asset $image;
 
     protected ?string $preset = null;
+    protected ?int $quality = null;
 
     protected array $formats;
     protected array $widths;
     protected array $attributes;
 
-    protected ?int $quality = null;
+    protected ?float $ratio = null;
+    protected string|bool|null $crop = null;
 
     public function __construct(File|Asset $file)
     {
@@ -32,17 +34,11 @@ class ResponsiveImage implements Stringable
 
         $this->image = $file;
 
-        // Minimal, universally safe fallbacks if the plugin isn't registered
-        // (e.g. used outside a full Kirby bootstrap): a single JPEG at the
-        // image's native width. The recommended defaults live in index.php.
         $this->formats = $this->getPluginOptions('image.formats', ['jpeg']);
         $this->widths = $this->getPluginOptions('image.widths', ['auto']);
         $this->attributes = $this->getPluginOptions('image.attributes', []);
 
-        // Left unset (null) rather than defaulted here: Kirby's own thumb
-        // component already falls back to its configured default (90) when
-        // no quality is given, so there's nothing for this class to duplicate.
-        $this->quality = $this->getPluginOptions('image.quality', null);
+        $this->quality = $this->getPluginOptions('image.quality');
     }
 
     public static function for(File|Asset $image): static
@@ -88,6 +84,14 @@ class ResponsiveImage implements Stringable
             $this->widths($options['widths']);
         }
 
+        if (isset($options['ratio'])) {
+            $this->ratio($options['ratio']);
+        }
+
+        if (isset($options['crop'])) {
+            $this->crop($options['crop']);
+        }
+
         return $this;
     }
 
@@ -121,6 +125,29 @@ class ResponsiveImage implements Stringable
         }, array_values($widths));
 
         asort($this->widths, SORT_NUMERIC);
+
+        return $this;
+    }
+
+    /** @param string|float|null|(int|float)[] $ratio */
+    public function ratio(string|array|float|null $ratio): static
+    {
+        if (is_string($ratio)) {
+            $ratio = explode('/', $ratio, 2);
+        }
+
+        $this->ratio = match (true) {
+            is_null($ratio) => null,
+            is_array($ratio) => (float) $ratio[0] / (float) $ratio[1],
+            default => $ratio,
+        };
+
+        return $this;
+    }
+
+    public function crop(string|bool|null $crop): static
+    {
+        $this->crop = $crop;
 
         return $this;
     }
@@ -308,6 +335,8 @@ class ResponsiveImage implements Stringable
             ])),
             default => $this->image->thumb([
                 'width' => $thumbnailWidth,
+                'height' => $this->getHeight($thumbnailWidth),
+                'crop' => $this->getCrop(),
                 'format' => $thumbnailFormat,
                 'quality' => $thumbnailQuality,
             ]),
@@ -322,6 +351,8 @@ class ResponsiveImage implements Stringable
             default => A::reduce($widths, fn (array $sizes, int $width) => $sizes + [
                 "{$width}w" => [
                     'width' => $width,
+                    'height' => $this->getHeight($width),
+                    'crop' => $this->getCrop(),
                 ],
             ], []),
         };
@@ -377,11 +408,29 @@ class ResponsiveImage implements Stringable
         return $this->preset;
     }
 
+    protected function getQuality(?string $format = null): ?int
+    {
+        if ($this->quality === null) {
+            return null;
+        }
+
+        return match ($format) {
+            'avif' => 0.6 * $this->quality,
+            'webp' => 0.75 * $this->quality,
+            default => $this->quality,
+        };
+    }
+
     protected function getFormats(): array
     {
         return A::map($this->formats, function (string $format) {
             return $format === 'auto' ? Str::after($this->image->mime(), '/') : $format;
         });
+    }
+
+    protected function getCrop(): string|bool|null
+    {
+        return $this->crop ?? ($this->ratio !== null ? true : null);
     }
 
     protected function getWidths(): array
@@ -395,17 +444,13 @@ class ResponsiveImage implements Stringable
         return $widths;
     }
 
-    protected function getQuality(?string $format = null): ?int
+    protected function getHeight(?int $width): ?int
     {
-        if ($this->quality === null) {
+        if ($width === null || $this->ratio === null) {
             return null;
         }
 
-        return match ($format) {
-            'avif' => 0.6 * $this->quality,
-            'webp' => 0.75 * $this->quality,
-            default => $this->quality,
-        };
+        return (int) round($width / $this->ratio);
     }
 
     protected function getPluginOptions(?string $key = null, mixed $default = null): mixed
