@@ -53,7 +53,7 @@ You can also build on the fluent setters directly:
 <?= $image ?>
 ```
 
-Call `ratio()` to crop every generated width to a fixed aspect ratio, without having to define a named `thumbs.presets.*` entry. It accepts a `'width/height'` string (e.g. the value of a `ratio` field), a `[width, height]` array, or a plain float:
+Call `ratio()` to crop every generated width to a fixed aspect ratio, without having to define a named `thumbs.presets.*` entry. It accepts a `'width/height'` string (e.g. the value of a `ratio` field), a `[width, height]` array, a plain float, or `'auto'`/`null` to reset it:
 
 ```php
 <?= $page->image()->toResponsiveImage()

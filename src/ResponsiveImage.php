@@ -129,9 +129,13 @@ class ResponsiveImage implements Stringable
         return $this;
     }
 
-    /** @param string|float|null|(int|float)[] $ratio */
+    /** @param 'auto'|string|float|null|(int|float)[] $ratio */
     public function ratio(string|array|float|null $ratio): static
     {
+        if ($ratio === 'auto') {
+            $ratio = null;
+        }
+
         if (is_string($ratio)) {
             $ratio = explode('/', $ratio, 2);
         }
