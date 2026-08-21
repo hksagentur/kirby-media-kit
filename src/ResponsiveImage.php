@@ -132,7 +132,7 @@ class ResponsiveImage implements Stringable
     /** @param 'auto'|string|float|null|(int|float)[] $ratio */
     public function ratio(string|array|float|null $ratio): static
     {
-        if ($ratio === 'auto') {
+        if ($ratio === 'auto' || $ratio === '') {
             $ratio = null;
         }
 
