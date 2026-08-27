@@ -1,13 +1,13 @@
 <?php
 
-use Hks\MediaKit\ResponsiveImage;
+use Hks\MediaKit\PendingResponsiveImage;
 
 return [
 
     /**
      * Converts the current file to a responsive image tag.
      */
-    'toResponsiveImage' => function (string|array|null $options = null): ResponsiveImage {
+    'toResponsiveImage' => function (string|array|null $options = null): PendingResponsiveImage {
         if (is_null($options)) {
             $options = ['preset' => 'default'];
         }
@@ -16,7 +16,7 @@ return [
             $options = ['preset' => $options];
         }
 
-        return ResponsiveImage::from(['image' => $this, ...$options]);
+        return PendingResponsiveImage::from(['image' => $this, ...$options]);
     },
 
 ];

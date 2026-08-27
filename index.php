@@ -3,10 +3,9 @@
 Kirby::plugin('hksagentur/media-kit', [
     'options' => [
         'image' => [
-            'quality' => 80,
             'formats' => [
                 'webp',
-                'jpeg',
+                'auto',
             ],
             'widths' => [
                 320,
@@ -17,8 +16,8 @@ Kirby::plugin('hksagentur/media-kit', [
                 1600,
                 1920,
             ],
-            'attributes' => [],
         ],
     ],
+    'snippets' => require __DIR__ . '/config/snippets.php',
     'fileMethods' => require __DIR__ . '/config/methods/file.php',
 ]);
