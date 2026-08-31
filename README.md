@@ -21,7 +21,7 @@ Download the project archive and copy the files to the plugin directory of your 
 
 ## Usage
 
-### `ResponsiveImage`
+### `Image`
 
 Generates a `<picture>` element with multiple `<source>` tags covering the configured image formats and widths, falling back to a plain `<img>` tag for vector images (e.g. SVGs).
 
@@ -107,7 +107,7 @@ You can also pass an inline options array instead of a preset name — same rule
 
 #### Ratio
 
-For a fixed aspect ratio across every generated breakpoint, `ratio()` saves you from computing `width`/`height`/`crop` by hand for each one. Kirby's `thumb()` only supports a ratio via an explicit `width` + `height` + `crop` combination — which you'd otherwise have to work out separately for every width `ResponsiveImage` generates. Call `ratio()` once and it computes the matching `height` automatically for each breakpoint:
+For a fixed aspect ratio across every generated breakpoint, `ratio()` saves you from computing `width`/`height`/`crop` by hand for each one. Kirby's `thumb()` only supports a ratio via an explicit `width` + `height` + `crop` combination — which you'd otherwise have to work out separately for every width the plugin generates. Call `ratio()` once and it computes the matching `height` automatically for each breakpoint:
 
 ```php
 <?= $page->image()->toResponsiveImage()

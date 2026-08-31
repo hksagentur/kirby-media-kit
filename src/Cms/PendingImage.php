@@ -1,6 +1,6 @@
 <?php
 
-namespace Hks\MediaKit;
+namespace Hks\MediaKit\Cms;
 
 use Hks\MediaKit\Html\Attributes;
 use Hks\MediaKit\Html\Sources;
@@ -15,8 +15,10 @@ use Kirby\Toolkit\Collection;
 use Kirby\Toolkit\Str;
 use Stringable;
 
-class PendingResponsiveImage implements Stringable
+class PendingImage implements Stringable
 {
+    use HasModifications;
+
     protected File|Asset $image;
     protected Attributes $attributes;
 
@@ -28,9 +30,6 @@ class PendingResponsiveImage implements Stringable
 
     /** @var (int|'auto')[] */
     protected array $widths = [];
-
-    /** @var array<string, mixed> */
-    protected array $modifications = [];
 
     public function __construct(File|Asset $file, array $options = [])
     {
@@ -110,6 +109,36 @@ class PendingResponsiveImage implements Stringable
         return $this;
     }
 
+    public function id(?string $id): static
+    {
+        $this->attributes->set('id', $id);
+
+        return $this;
+    }
+
+    /** @param string|string[]|null $classes */
+    public function class(string|array|null $classes): static
+    {
+        $this->attributes->set('class', $classes);
+
+        return $this;
+    }
+
+    /** @param string|string[]|null $styles */
+    public function style(string|array|null $styles): static
+    {
+        $this->attributes->set('style', $styles);
+
+        return $this;
+    }
+
+    public function alt(?string $text): static
+    {
+        $this->attributes->set('alt', $text);
+
+        return $this;
+    }
+
     /** @param string|string[]|null $sizes */
     public function sizes(string|array|null $sizes): static
     {
@@ -142,36 +171,6 @@ class PendingResponsiveImage implements Stringable
         return $this;
     }
 
-    public function id(?string $id): static
-    {
-        $this->attributes->set('id', $id);
-
-        return $this;
-    }
-
-    /** @param string|string[]|null $styles */
-    public function style(string|array|null $styles): static
-    {
-        $this->attributes->set('style', $styles);
-
-        return $this;
-    }
-
-    /** @param string|string[]|null $classes */
-    public function class(string|array|null $classes): static
-    {
-        $this->attributes->set('class', $classes);
-
-        return $this;
-    }
-
-    public function alt(?string $text): static
-    {
-        $this->attributes->set('alt', $text);
-
-        return $this;
-    }
-
     public function draggable(?bool $draggable = true): static
     {
         $this->attributes->set('draggable', $draggable);
@@ -179,10 +178,10 @@ class PendingResponsiveImage implements Stringable
         return $this;
     }
 
-    public function generate(): ResponsiveImage
+    public function generate(): Image
     {
         if (! $this->image->isResizable()) {
-            return new ResponsiveImage(new Sources(), $this->attributes->clone()->mergeIfMissing([
+            return new Image($this->image, new Sources(), $this->attributes->clone()->mergeIfMissing([
                 'src' => $this->image->url(),
                 'width' => $this->image->width(),
                 'height' => $this->image->height(),
@@ -198,7 +197,7 @@ class PendingResponsiveImage implements Stringable
         $thumbnail = $this->generateThumbnail();
         $sources = $this->generateSources($sizes);
 
-        return new ResponsiveImage($sources, $this->attributes->clone()->mergeIfMissing([
+        return new Image($this->image, $sources, $this->attributes->clone()->mergeIfMissing([
             'src' => $thumbnail->url(),
             'srcset' => $srcset,
             'sizes' => $sizes,
@@ -223,36 +222,9 @@ class PendingResponsiveImage implements Stringable
         return $this->toString();
     }
 
-    /** @param string|string[]|null $keys */
-    protected function isModified(string|array|null $keys = null): bool
+    public function __call(string $method, array $arguments): static
     {
-        if ($keys !== null) {
-            return $this->hasModifications((array) $keys);
-        }
-
-        return $this->modifications !== [];
-    }
-
-    /** @param string[] $keys */
-    protected function hasModifications(array $keys): bool
-    {
-        foreach ($keys as $key) {
-            if (array_key_exists($key, $this->modifications)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    protected function modification(string $key, mixed $default = null): mixed
-    {
-        return $this->modifications[$key] ?? $default;
-    }
-
-    protected function modify(string $key, mixed $value): static
-    {
-        $this->modifications[$key] = $value;
+        $this->attributes->set(strtolower($method), $arguments[0] ?? true);
 
         return $this;
     }

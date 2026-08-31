@@ -1,20 +1,26 @@
 <?php
 
-namespace Hks\MediaKit;
+namespace Hks\MediaKit\Cms;
 
 use Hks\MediaKit\Html\Attributes;
 use Hks\MediaKit\Html\Sources;
 use Kirby\Cms\App;
+use Kirby\Cms\File;
+use Kirby\Filesystem\Asset;
 use Stringable;
 
-class ResponsiveImage implements Stringable
+class Image implements Stringable
 {
     public function __construct(
-        protected ?Sources $sources = null,
-        protected ?Attributes $attributes = null,
+        protected File|Asset $original,
+        protected Sources $sources = new Sources(),
+        protected Attributes $attributes = new Attributes(),
     ) {
-        $this->sources ??= new Sources();
-        $this->attributes ??= new Attributes();
+    }
+
+    public function original(): File|Asset
+    {
+        return $this->original;
     }
 
     public function hasAttributes(): bool
@@ -51,7 +57,7 @@ class ResponsiveImage implements Stringable
     {
         return App::instance()->snippet('media-kit/image', [
             ...$data,
-            'sources' => $this->sources,
+            'image' => $this,
             'attributes' => $this->attributes->cloneWith($attributes),
         ], return: true);
     }
@@ -69,5 +75,10 @@ class ResponsiveImage implements Stringable
     public function __toString(): string
     {
         return $this->render();
+    }
+
+    public function __call(string $method, array $arguments): mixed
+    {
+        return $this->original->$method(...$arguments);
     }
 }

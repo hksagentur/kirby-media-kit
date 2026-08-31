@@ -1,18 +1,14 @@
 <?php
 /**
  * @var \Hks\MediaKit\Html\Attributes $attributes
- * @var \Hks\MediaKit\Html\Sources $sources
+ * @var \Hks\MediaKit\Cms\Image $image
  */
 ?>
 
-<?php if ($sources->isNotEmpty()): ?>
+<?php if ($image->hasSources()): ?>
     <picture>
-        <?php foreach ($sources as $source): ?>
-            <source <?= attr([
-                'type' => $source->type(),
-                'srcset' => $source->srcset(),
-                'sizes' => $source->sizes(),
-            ]) ?>>
+        <?php foreach ($image->sources() as $source): ?>
+            <?= $source ?>
         <?php endforeach ?>
 
         <img <?= $attributes ?>>

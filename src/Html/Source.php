@@ -2,90 +2,53 @@
 
 namespace Hks\MediaKit\Html;
 
-use Kirby\Toolkit\Html;
-use Stringable;
-
-class Source implements Stringable
+class Source extends Element
 {
-    public function __construct(
-        protected string $srcset,
-        protected ?string $type = null,
-        protected ?string $media = null,
-        protected ?string $sizes = null,
-        protected ?int $width = null,
-        protected ?int $height = null,
-    ) {
-    }
-
     public static function factory(array $data): static
     {
-        return new static(
-            $data['srcset'],
-            $data['type'] ?? null,
-            $data['media'] ?? null,
-            $data['sizes'] ?? null,
-            $data['width'] ?? null,
-            $data['height'] ?? null,
-        );
-    }
-
-    public function srcset(): string
-    {
-        return $this->srcset;
+        return new static(Attributes::from([
+            'type' => $data['type'] ?? null,
+            'media' => $data['media'] ?? null,
+            'src' => $data['src'] ?? null,
+            'srcset' => $data['srcset'] ?? null,
+            'sizes' => $data['sizes'] ?? null,
+            'width' => $data['width'] ?? null,
+            'height' => $data['height'] ?? null,
+        ]));
     }
 
     public function type(): ?string
     {
-        return $this->type;
+        return $this->attributes->get('type');
     }
 
     public function media(): ?string
     {
-        return $this->media;
+        return $this->attributes->get('media');
+    }
+
+    public function src(): ?string
+    {
+        return $this->attributes->get('src');
+    }
+
+    public function srcset(): ?string
+    {
+        return $this->attributes->get('srcset');
     }
 
     public function sizes(): ?string
     {
-        return $this->sizes;
+        return $this->attributes->get('sizes');
     }
 
     public function width(): ?int
     {
-        return $this->width;
+        return $this->attributes->get('width');
     }
 
     public function height(): ?int
     {
-        return $this->height;
-    }
-
-    public function toString(): string
-    {
-        return $this->toHtml();
-    }
-
-    public function toHtml(array $attributes = []): string
-    {
-        return Html::tag('source', attr: [
-            ...$this->toArray(),
-            ...$attributes,
-        ]);
-    }
-
-    public function toArray(): array
-    {
-        return [
-            'srcset' => $this->srcset,
-            'type' => $this->type,
-            'sizes' => $this->sizes,
-            'media' => $this->media,
-            'width' => $this->width,
-            'height' => $this->height,
-        ];
-    }
-
-    public function __toString(): string
-    {
-        return $this->srcset;
+        return $this->attributes->get('height');
     }
 }

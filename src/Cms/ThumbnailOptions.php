@@ -1,6 +1,6 @@
 <?php
 
-namespace Hks\MediaKit;
+namespace Hks\MediaKit\Cms;
 
 use Hks\MediaKit\Toolkit\Ratio;
 
