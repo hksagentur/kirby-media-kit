@@ -33,7 +33,7 @@ class Ratio implements Stringable
     {
         $parts = explode('/', $ratio, 2);
 
-        return new static((float) $parts[0], (float) $parts[1]);
+        return new static((float) $parts[0], (float) ($parts[1] ?? 1));
     }
 
     public function width(): float

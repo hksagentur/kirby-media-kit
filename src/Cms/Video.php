@@ -59,6 +59,31 @@ class Video implements Stringable
         return $this->sources;
     }
 
+    public function id(): ?string
+    {
+        return $this->attributes->get('id');
+    }
+
+    public function width(): ?int
+    {
+        return $this->attributes->get('width');
+    }
+
+    public function height(): ?int
+    {
+        return $this->attributes->get('height');
+    }
+
+    public function html(array $attributes = []): string
+    {
+        return $this->render(attributes: $attributes);
+    }
+
+    public function toArray(): array
+    {
+        return $this->attributes->toArray();
+    }
+
     public function render(array $data = [], array $attributes = []): string
     {
         return App::instance()->snippet('media-kit/video', [

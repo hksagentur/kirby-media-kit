@@ -63,7 +63,7 @@ class PendingVideo implements Stringable
     /** @param 'auto'|string|float|null|array{0: int|float, 1: int|float} $ratio */
     public function ratio(string|array|float|null $ratio): static
     {
-        return $this->modify('ratio', $ratio);
+        return $this->modify('ratio', ! in_array($ratio, ['auto', ''], true) ? $ratio : null);
     }
 
     /** @param 'top'|'top left'|'top right'|'left'|'center'|'right'|'bottom'|'bottom left'|'bottom right'|string|bool|null $crop */
@@ -168,6 +168,13 @@ class PendingVideo implements Stringable
         return $this;
     }
 
+    public function draggable(?bool $draggable = true): static
+    {
+        $this->attributes->set('draggable', $draggable);
+
+        return $this;
+    }
+
     public function generate(): Video
     {
         $poster = $this->generatePoster();
@@ -203,7 +210,7 @@ class PendingVideo implements Stringable
 
     public function __call(string $method, array $arguments): static
     {
-        $this->attributes->set(strtolower($method), $arguments[0] ?? true);
+        $this->attributes->set(strtolower($method), $arguments === [] ? true : $arguments[0]);
 
         return $this;
     }
@@ -214,7 +221,9 @@ class PendingVideo implements Stringable
             return null;
         }
 
-        $image = PendingImage::for($this->poster);
+        $image = PendingImage::for($this->poster)
+            ->widths(['auto'])
+            ->formats(['auto']);
 
         if ($this->isModified('preset')) {
             $image->preset($this->modification('preset'));

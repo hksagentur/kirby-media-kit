@@ -174,7 +174,9 @@ transformed — the poster is the one part that *is* fully generated, and it's w
 video: without it the browser has to guess a first frame to show, and there's no way for the plugin to
 work out the video's own dimensions to prevent layout shift. `preset()`/`quality()`/`ratio()`/`crop()`/
 `width()`/`height()` all configure that poster — the exact same setters `Image` has, since the poster is
-just a `Image` under the hood:
+just a `Image` under the hood. **They only have an effect together with `poster()`** — calling any of
+them without also calling `poster()` compiles and chains fine, but there's no poster to apply them to,
+so nothing happens:
 
 ```php
 <?= $page->file('movie.mp4')->toResponsiveVideo()
@@ -182,6 +184,11 @@ just a `Image` under the hood:
     ->ratio('16/9')
     ->crop('top') ?>
 ```
+
+Without an explicit `preset()`/`ratio()`/`width()`/`height()`, the poster defaults to its own natural
+size and format — it does *not* inherit the site-wide `formats`/`widths` from
+[Configuration](#configuration), since those exist for responsive breakpoints the poster doesn't have
+(only its flat `src`/`width`/`height` are ever read, never a `srcset`).
 
 The poster's resolved width/height (after `ratio()`/`crop()`) become the `<video>` tag's own `width`/
 `height` fallback, unless you set them explicitly yourself.
@@ -199,9 +206,12 @@ Standard `<video>` attributes are available directly:
 ```
 
 Any other HTML attribute without a dedicated setter (`tabindex()`, `title()`, ...) still works through
-the same fluent syntax, as long as its name has no dash — attributes with one (`aria-*`, `data-*`) need
-the `attributes([...])` array form instead, since there's no reliable way to tell from a method name
-alone whether a dash belongs in it:
+the same fluent syntax — this applies equally to `Image`. Two things to know about it: attributes with
+a dash in their name (`aria-*`, `data-*`) need the `attributes([...])` array form instead, since there's
+no reliable way to tell from a method name alone whether a dash belongs in it; and because *any*
+unrecognized method name is accepted this way, a typo on a real setter (`->wdith(400)` instead of
+`->width(400)`) doesn't raise an error — it silently renders a meaningless `wdith="400"` attribute
+instead. Double-check the spelling if a rendered tag doesn't look like you expected.
 
 ```php
 <?= $page->file('movie.mp4')->toResponsiveVideo()->tabindex(0) ?>

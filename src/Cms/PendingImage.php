@@ -232,7 +232,7 @@ class PendingImage implements Stringable
 
     public function __call(string $method, array $arguments): static
     {
-        $this->attributes->set(strtolower($method), $arguments[0] ?? true);
+        $this->attributes->set(strtolower($method), $arguments === [] ? true : $arguments[0]);
 
         return $this;
     }
