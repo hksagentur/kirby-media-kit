@@ -25,6 +25,11 @@ abstract class Element implements Stringable
         return $this->attributes;
     }
 
+    public function html(array $attributes = []): string
+    {
+        return $this->toHtml($attributes);
+    }
+
     public function toString(): string
     {
         return $this->toHtml();

@@ -215,6 +215,11 @@ class PendingImage implements Stringable
         ]));
     }
 
+    public function html(array $attributes = []): string
+    {
+        return $this->generate()->html($attributes);
+    }
+
     public function toString(): string
     {
         return $this->toHtml();

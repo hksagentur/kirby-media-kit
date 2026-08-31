@@ -35,6 +35,11 @@ abstract class Collection extends ToolkitCollection
         return $this->append($item);
     }
 
+    public function html(array $attributes = []): string
+    {
+        return $this->toHtml($attributes);
+    }
+
     public function toString(): string
     {
         return implode("\n", $this->toArray(fn (Element $item) => $item->toString()));
