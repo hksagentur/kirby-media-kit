@@ -178,6 +178,14 @@ class PendingImage implements Stringable
         return $this;
     }
 
+    /** @param 'anonymous'|'use-credentials'|null $crossOrigin */
+    public function crossOrigin(?string $crossOrigin): static
+    {
+        $this->attributes->set('crossorigin', $crossOrigin);
+
+        return $this;
+    }
+
     public function generate(): Image
     {
         if (! $this->image->isResizable()) {

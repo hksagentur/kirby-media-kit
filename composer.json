@@ -1,6 +1,6 @@
 {
   "name": "hksagentur/kirby-media-kit",
-  "description": "Effortless responsive image tags for Kirby CMS",
+  "description": "Effortless responsive image and video tags for Kirby CMS",
   "type": "kirby-plugin",
   "license": "ISC",
   "authors": [

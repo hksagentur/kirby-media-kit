@@ -1,6 +1,7 @@
 <?php
 
 use Hks\MediaKit\Cms\PendingImage;
+use Hks\MediaKit\Cms\PendingVideo;
 
 return [
 
@@ -17,6 +18,13 @@ return [
         }
 
         return PendingImage::from(['image' => $this, ...$options]);
+    },
+
+    /**
+     * Converts the current file to a responsive video tag.
+     */
+    'toResponsiveVideo' => function (array $options = []): PendingVideo {
+        return PendingVideo::from(['video' => $this, ...$options]);
     },
 
 ];

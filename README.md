@@ -1,6 +1,6 @@
 # Kirby Media Kit
 
-Effortless responsive image tags for [Kirby CMS](https://getkirby.com) — modern `<picture>` markup with automatic AVIF/WebP conversion and multiple breakpoints, no manual thumb wrangling required.
+Effortless responsive image and video tags for [Kirby CMS](https://getkirby.com) — modern `<picture>` markup with automatic AVIF/WebP conversion and multiple breakpoints, plus `<video>` tags with a properly generated poster, no manual thumb wrangling required.
 
 ## Requirements
 
@@ -161,9 +161,102 @@ If you want a specific aspect ratio while cropping, pair it with `ratio()`:
 
 </details>
 
+### `Video`
+
+Generates a `<video>` element with the file itself as its `<source>`, plus an optional generated poster image.
+
+```php
+<?= $page->file('movie.mp4')->toResponsiveVideo() ?>
+```
+
+Kirby has no way to process video, so unlike `Image`, nothing about the video file itself is ever
+transformed — the poster is the one part that *is* fully generated, and it's worth adding one on every
+video: without it the browser has to guess a first frame to show, and there's no way for the plugin to
+work out the video's own dimensions to prevent layout shift. `preset()`/`quality()`/`ratio()`/`crop()`/
+`width()`/`height()` all configure that poster — the exact same setters `Image` has, since the poster is
+just a `Image` under the hood:
+
+```php
+<?= $page->file('movie.mp4')->toResponsiveVideo()
+    ->poster($page->file('poster.jpg'))
+    ->ratio('16/9')
+    ->crop('top') ?>
+```
+
+The poster's resolved width/height (after `ratio()`/`crop()`) become the `<video>` tag's own `width`/
+`height` fallback, unless you set them explicitly yourself.
+
+Standard `<video>` attributes are available directly:
+
+```php
+<?= $page->file('movie.mp4')->toResponsiveVideo()
+    ->poster($page->file('poster.jpg'))
+    ->controls()
+    ->autoplay(false)
+    ->muted()
+    ->loop()
+    ->preload('metadata') ?>
+```
+
+Any other HTML attribute without a dedicated setter (`tabindex()`, `title()`, ...) still works through
+the same fluent syntax, as long as its name has no dash — attributes with one (`aria-*`, `data-*`) need
+the `attributes([...])` array form instead, since there's no reliable way to tell from a method name
+alone whether a dash belongs in it:
+
+```php
+<?= $page->file('movie.mp4')->toResponsiveVideo()->tabindex(0) ?>
+<?= $page->file('movie.mp4')->toResponsiveVideo()->attributes(['aria-label' => 'Product demo']) ?>
+```
+
+#### Multiple formats, captions & subtitles
+
+`toResponsiveVideo()` only ever renders the video file itself as a single `<source>` — it has no opinion
+about your project's own content structure for alternate formats or `<track>` elements, since that
+varies too much from project to project to guess at. If you need them, override the plugin's
+`media-kit/video` snippet in your own `site/snippets/media-kit/video.php`. It receives the resolved
+`Hks\MediaKit\Cms\Video` instance — `original()` gives you the real Kirby `File` to read your own
+blueprint fields from, and `sources()` still gives you the plugin's own base `<source>` to render
+alongside whatever you add:
+
+```php
+<?php
+/**
+ * @var \Hks\MediaKit\Cms\Video $video
+ * @var \Hks\MediaKit\Html\Attributes $attributes
+ */
+$original = $video->original();
+?>
+
+<video <?= $attributes ?>>
+    <?php foreach ($original->formats()->toStructure() as $format): ?>
+        <source <?= attr([
+            'src' => $format->file()->toFile()?->url(),
+            'type' => $format->file()->toFile()?->mime(),
+        ]) ?>>
+    <?php endforeach ?>
+
+    <?php foreach ($video->sources() as $source): ?>
+        <?= $source ?>
+    <?php endforeach ?>
+
+    <?php foreach ($original->captions()->toStructure() as $caption): ?>
+        <track <?= attr([
+            'src' => $caption->file()->toFile()?->url(),
+            'kind' => 'captions',
+            'label' => $caption->title()->value(),
+            'srclang' => $caption->language()->value(),
+        ]) ?>>
+    <?php endforeach ?>
+</video>
+```
+
+This is exactly the tradeoff `toResponsiveImage()` never has to make — every image gets format/breakpoint
+negotiation out of the box, because that only ever depends on the file itself. Extra video sources and
+tracks depend on how *your* project models them in content, which the plugin can't know in advance.
+
 ## Configuration
 
-Plugin options are read from the `hksagentur.media-kit` config key — these are the site-wide defaults for `formats`/`widths`/`attributes`, used to build the `<picture>`'s `<source>`s. They're separate from `width`/`height`/`crop`/`quality`, which come from [presets](#presets) instead:
+Plugin options are read from the `hksagentur.media-kit` config key — these are the site-wide defaults for `formats`/`widths`/`attributes` (image) and `attributes` (video). The image ones are separate from `width`/`height`/`crop`/`quality`, which come from [presets](#presets) instead; the video poster's equivalents come from whatever `preset()`/`ratio()`/etc. you configure on it, same as any other `Image`:
 
 ```php
 <?php
@@ -176,6 +269,11 @@ return [
             'widths' => [400, 800, 1200, 1600, 2000],
             'attributes' => [
                 'data-pin-nopin' => 'true',
+            ],
+        ],
+        'video' => [
+            'attributes' => [
+                'playsinline' => true,
             ],
         ],
     ],
