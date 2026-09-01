@@ -41,11 +41,11 @@ Build on the fluent setters to customize it — this is the recommended way to c
 <?= $image ?>
 ```
 
-For images further down the page, mark them lazy per image rather than as a site-wide default — the
-first, above-the-fold image on a page generally shouldn't be lazy-loaded:
+Any other HTML attribute without a dedicated setter (`tabindex()`, `title()`, ...) still works through the same fluent syntax — this applies equally to `Video`. Two things to know about it: attributes with a dash in their name (`aria-*`, `data-*`) need the `attributes([...])` array form instead, since there's no reliable way to tell from a method name alone whether a dash belongs in it; and because *any* unrecognized method name is accepted this way, a typo on a real setter (`->wdith(400)` instead of `->width(400)`) doesn't raise an error — it silently renders a meaningless `wdith="400"` attribute instead. Double-check the spelling if a rendered tag doesn't look like you expected.
 
 ```php
-<?= $page->image()->toResponsiveImage()->loading('lazy') ?>
+<?= $page->image()->toResponsiveImage()->tabindex(0) ?>
+<?= $page->image()->toResponsiveImage()->attributes(['aria-label' => 'Product photo']) ?>
 ```
 
 The file method also accepts a preset name directly:
@@ -62,6 +62,13 @@ Or, if you'd rather set several things at once without chaining, an options arra
     'widths' => [400, 800, 1200, 1600],
     'quality' => 80,
 ]) ?>
+```
+
+For images further down the page, mark them lazy per image rather than as a site-wide default — the
+first, above-the-fold image on a page generally shouldn't be lazy-loaded:
+
+```php
+<?= $page->image()->toResponsiveImage()->loading('lazy') ?>
 ```
 
 #### Presets
@@ -123,44 +130,6 @@ It works together with `preset()` too, overriding just the preset's `height`/`cr
 <?= $page->image()->toResponsiveImage('hero')->ratio('1/1') ?>
 ```
 
-### FAQ
-
-<details>
-<summary>Where does the default quality come from if I never call <code>quality()</code>?</summary>
-
-If neither a preset nor an explicit `quality()` call sets one, it falls back to Kirby's own `thumbs.quality` as a site-wide default — see [Configuration](#configuration).
-
-</details>
-
-<details>
-<summary>Can a preset set its own <code>format</code>?</summary>
-
-No — `format` always matches whichever `<source>`/`<img>` is currently being generated, and a preset can never override it. Otherwise a `<source type="image/webp">` could end up pointing at a non-WebP file.
-
-</details>
-
-<details>
-<summary>Why did my preset's <code>width</code> win even though I called <code>widths()</code>?</summary>
-
-`widths()` configures the list of responsive breakpoints to generate — like `formats()`, it's a site-wide/config-level setting, not a per-image preference. So a preset's own `width` always wins over it for the single fallback `<img>`. If you want to force one specific width regardless of the preset, call `width()` instead — like `quality()`/`ratio()`/`crop()`, it overrides just that one aspect, and the `<img>` tag's `width`/`height` attributes always stay in sync with whatever actually gets generated.
-
-Each responsive breakpoint, however, keeps its own width regardless of an inline preset (otherwise every breakpoint would collapse to the same size). Calling `widths()` explicitly also overrides a *named* srcset preset (`thumbs.srcsets.*`) — it discards the preset's own breakpoints (which may be individually art-directed, e.g. different crops per width) and falls back to plain breakpoints at the widths you gave it. Without an explicit `widths()` call, the named preset's own breakpoints apply as configured.
-
-</details>
-
-<details>
-<summary>Why did <code>crop('top')</code> give me a square image?</summary>
-
-`crop()` is a thin passthrough to Kirby's own `thumb(['crop' => ...])` — it doesn't compute a height for you. Without a `ratio()` call or an explicit `height()`, Kirby's own crop logic defaults the height to the width, i.e. a square. This is Kirby's own long-documented `thumb()` behavior, not a plugin-specific quirk, and it applies to any crop anchor (`crop(true)`, `crop('top')`, ...), not just some of them.
-
-If you want a specific aspect ratio while cropping, pair it with `ratio()`:
-
-```php
-<?= $page->image()->toResponsiveImage()->ratio('4/3')->crop('top') ?>
-```
-
-</details>
-
 ### `Video`
 
 Generates a `<video>` element with the file itself as its `<source>`, plus an optional generated poster image.
@@ -185,6 +154,16 @@ so nothing happens:
     ->crop('top') ?>
 ```
 
+Since the poster reuses the same setters as `Image`, the options array form works the same way too — recognizing `poster`, `preset`, `quality`, `ratio`, `crop`, `width`, `height` and `attributes`:
+
+```php
+<?= $page->file('movie.mp4')->toResponsiveVideo([
+    'poster' => $page->file('poster.jpg'),
+    'ratio' => '16/9',
+    'crop' => 'top',
+]) ?>
+```
+
 Without an explicit `preset()`/`ratio()`/`width()`/`height()`, the poster defaults to its own natural
 size and format — it does *not* inherit the site-wide `formats`/`widths` from
 [Configuration](#configuration), since those exist for responsive breakpoints the poster doesn't have
@@ -205,13 +184,7 @@ Standard `<video>` attributes are available directly:
     ->preload('metadata') ?>
 ```
 
-Any other HTML attribute without a dedicated setter (`tabindex()`, `title()`, ...) still works through
-the same fluent syntax — this applies equally to `Image`. Two things to know about it: attributes with
-a dash in their name (`aria-*`, `data-*`) need the `attributes([...])` array form instead, since there's
-no reliable way to tell from a method name alone whether a dash belongs in it; and because *any*
-unrecognized method name is accepted this way, a typo on a real setter (`->wdith(400)` instead of
-`->width(400)`) doesn't raise an error — it silently renders a meaningless `wdith="400"` attribute
-instead. Double-check the spelling if a rendered tag doesn't look like you expected.
+Any other HTML attribute without a dedicated setter works the same way as [described for `Image`](#image) above:
 
 ```php
 <?= $page->file('movie.mp4')->toResponsiveVideo()->tabindex(0) ?>
@@ -263,6 +236,44 @@ $original = $video->original();
 This is exactly the tradeoff `toResponsiveImage()` never has to make — every image gets format/breakpoint
 negotiation out of the box, because that only ever depends on the file itself. Extra video sources and
 tracks depend on how *your* project models them in content, which the plugin can't know in advance.
+
+### FAQ
+
+<details>
+<summary>Where does the default quality come from if I never call <code>quality()</code>?</summary>
+
+If neither a preset nor an explicit `quality()` call sets one, it falls back to Kirby's own `thumbs.quality` as a site-wide default — see [Configuration](#configuration).
+
+</details>
+
+<details>
+<summary>Can a preset set its own <code>format</code>?</summary>
+
+No — `format` always matches whichever `<source>`/`<img>` is currently being generated, and a preset can never override it. Otherwise a `<source type="image/webp">` could end up pointing at a non-WebP file.
+
+</details>
+
+<details>
+<summary>Why did my preset's <code>width</code> win even though I called <code>widths()</code>?</summary>
+
+`widths()` configures the list of responsive breakpoints to generate — like `formats()`, it's a site-wide/config-level setting, not a per-image preference. So a preset's own `width` always wins over it for the single fallback `<img>`. If you want to force one specific width regardless of the preset, call `width()` instead — like `quality()`/`ratio()`/`crop()`, it overrides just that one aspect, and the `<img>` tag's `width`/`height` attributes always stay in sync with whatever actually gets generated.
+
+Each responsive breakpoint, however, keeps its own width regardless of an inline preset (otherwise every breakpoint would collapse to the same size). Calling `widths()` explicitly also overrides a *named* srcset preset (`thumbs.srcsets.*`) — it discards the preset's own breakpoints (which may be individually art-directed, e.g. different crops per width) and falls back to plain breakpoints at the widths you gave it. Without an explicit `widths()` call, the named preset's own breakpoints apply as configured.
+
+</details>
+
+<details>
+<summary>Why did <code>crop('top')</code> give me a square image?</summary>
+
+`crop()` is a thin passthrough to Kirby's own `thumb(['crop' => ...])` — it doesn't compute a height for you. Without a `ratio()` call or an explicit `height()`, Kirby's own crop logic defaults the height to the width, i.e. a square. This is Kirby's own long-documented `thumb()` behavior, not a plugin-specific quirk, and it applies to any crop anchor (`crop(true)`, `crop('top')`, ...), not just some of them.
+
+If you want a specific aspect ratio while cropping, pair it with `ratio()`:
+
+```php
+<?= $page->image()->toResponsiveImage()->ratio('4/3')->crop('top') ?>
+```
+
+</details>
 
 ## Configuration
 
