@@ -186,6 +186,21 @@ class PendingImage implements Stringable
         return $this;
     }
 
+    public function focus(string|bool|null $point = true): static
+    {
+        $point = match (true) {
+            $point === true => $this->image->focus()->value(),
+            $point === false, $point === null => null,
+            default => $point,
+        };
+
+        if ($point !== null) {
+            $this->attributes->append('style', "--focus-point: {$point}");
+        }
+
+        return $this;
+    }
+
     public function generate(): Image
     {
         if (! $this->image->isResizable()) {

@@ -95,6 +95,15 @@ class Attributes implements IteratorAggregate, Stringable
         return $this;
     }
 
+    /** @param string|string[] $value */
+    public function append(string $name, string|array $value): static
+    {
+        return $this->set($name, [
+            ...array_filter([$this->get($name)]),
+            ...(array) $value,
+        ]);
+    }
+
     public function merge(self|array $attributes): static
     {
         foreach ($attributes as $name => $value) {
