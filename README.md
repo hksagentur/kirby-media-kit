@@ -106,6 +106,8 @@ You can override just one aspect of the preset without losing the rest — `crop
 <?= $page->image()->toResponsiveImage('hero')->width(800) ?>
 ```
 
+`width()`/`height()` also become the rendered tag's `width`/`height` attributes, and an explicit value always wins. Setting only one of them fills in the other in the generated image's own aspect ratio — so `->width(1920)` on a 542×384 original renders `width="1920" height="1360"`, even though Kirby never upscales the file itself. Set both to force a different ratio, or pass `null` to go back to the generated image's own size.
+
 You can also pass an inline options array instead of a preset name — same rules apply, just without the Kirby config lookup:
 
 ```php

@@ -204,12 +204,14 @@ class PendingImage implements Stringable
     public function generate(): Image
     {
         if (! $this->image->isResizable()) {
-            return new Image($this->image, new Sources(), $this->attributes->clone()->mergeIfMissing([
+            $dimensions = $this->resolveDimensions($this->image->width(), $this->image->height());
+
+            $attributes = $this->attributes->clone()->merge($dimensions)->mergeIfMissing([
                 'src' => $this->image->url(),
-                'width' => $this->image->width(),
-                'height' => $this->image->height(),
                 'alt' => $this->image->alt(),
-            ])->without('srcset', 'sizes'));
+            ])->without('srcset', 'sizes');
+
+            return new Image($this->image, new Sources(), $attributes);
         }
 
         $loading = $this->attributes->get('loading');
@@ -220,14 +222,16 @@ class PendingImage implements Stringable
         $thumbnail = $this->generateThumbnail();
         $sources = $this->generateSources($sizes);
 
-        return new Image($this->image, $sources, $this->attributes->clone()->mergeIfMissing([
+        $dimensions = $this->resolveDimensions($thumbnail->width(), $thumbnail->height());
+
+        $attributes = $this->attributes->clone()->merge($dimensions)->mergeIfMissing([
             'src' => $thumbnail->url(),
             'srcset' => $srcset,
             'sizes' => $sizes,
-            'width' => $thumbnail->width(),
-            'height' => $thumbnail->height(),
             'alt' => $this->image->alt(),
-        ]));
+        ]);
+
+        return new Image($this->image, $sources, $attributes);
     }
 
     public function html(array $attributes = []): string
@@ -409,20 +413,6 @@ class PendingImage implements Stringable
             ->toArray(fn (ThumbnailOptions $options) => $options->toArray());
     }
 
-    /** @param 'jpeg'|'png'|'avif'|'webp' $format */
-    protected function resolveThumbOptions(string $format): ThumbnailOptions
-    {
-        return (new ThumbnailOptions(['width' => $this->resolveFallbackWidth(), ...$this->resolvePreset()]))
-            ->merge([
-                'format' => $format,
-                'width' => $this->modification('width'),
-                'height' => $this->modification('height'),
-                'quality' => $this->resolveQuality($format),
-            ])
-            ->ratio($this->modification('ratio'))
-            ->crop($this->modification('crop'));
-    }
-
     /**
      * @param 'jpeg'|'png'|'avif'|'webp' $format
      * @return Collection<ThumbnailOptions>
@@ -439,6 +429,42 @@ class PendingImage implements Stringable
                 ->ratio($this->modification('ratio'))
                 ->crop($this->modification('crop'));
         });
+    }
+
+    /** @param 'jpeg'|'png'|'avif'|'webp' $format */
+    protected function resolveThumbOptions(string $format): ThumbnailOptions
+    {
+        return (new ThumbnailOptions(['width' => $this->resolveFallbackWidth(), ...$this->resolvePreset()]))
+            ->merge([
+                'format' => $format,
+                'width' => $this->modification('width'),
+                'height' => $this->modification('height'),
+                'quality' => $this->resolveQuality($format),
+            ])
+            ->ratio($this->modification('ratio'))
+            ->crop($this->modification('crop'));
+    }
+
+    /**
+     * @return array{width: int|string|null, height: int|string|null}
+     */
+    protected function resolveDimensions(int $width, int $height): array
+    {
+        $explicitWidth = $this->attributes->get('width');
+        $explicitHeight = $this->attributes->get('height');
+
+        $ratio = $width > 0 && $height > 0 ? $width / $height : null;
+
+        if ($ratio && is_numeric($explicitWidth) && $explicitHeight === null) {
+            $explicitHeight = (int) round($explicitWidth / $ratio);
+        } elseif ($ratio && is_numeric($explicitHeight) && $explicitWidth === null) {
+            $explicitWidth = (int) round($explicitHeight * $ratio);
+        }
+
+        return [
+            'width' => $explicitWidth ?? ($width ?: null),
+            'height' => $explicitHeight ?? ($height ?: null),
+        ];
     }
 
     /** @return 'jpeg'|'png'|'avif'|'webp' */
