@@ -2,6 +2,7 @@
 
 namespace Hks\MediaKit\Cms;
 
+use Closure;
 use Hks\MediaKit\Html\Attributes;
 use Hks\MediaKit\Html\Sources;
 use InvalidArgumentException;
@@ -18,6 +19,9 @@ class PendingVideo implements Stringable
     protected Attributes $attributes;
 
     protected File|Asset|null $poster = null;
+
+    /** @var Closure(PendingImage)|null */
+    protected ?Closure $posterCallback = null;
 
     public function __construct(File|Asset $file, array $options = [])
     {
@@ -41,32 +45,39 @@ class PendingVideo implements Stringable
         return static::for($options['video'], $options);
     }
 
-    public function poster(File|Asset|null $poster): static
+    /**
+     * @param Closure(PendingImage)|null $callback
+     */
+    public function poster(File|Asset|null $poster, ?Closure $callback = null): static
     {
         $this->poster = $poster;
+        $this->posterCallback = $callback;
 
         return $this;
     }
 
-    /** @param string|array<string, mixed> $preset */
+    /**
+     * @param string|array<string, mixed> $preset
+     * @deprecated 2.2.0 Use `poster($file, fn (PendingImage $poster) => $poster->preset(...))` instead.
+     */
     public function preset(string|array $preset): static
     {
         return $this->modify('preset', $preset);
     }
 
-    /** @param 'auto'|int|null $quality */
+    /**
+     * @param 'auto'|int|null $quality
+     * @deprecated 2.2.0 Use `poster($file, fn (PendingImage $poster) => $poster->quality(...))` instead.
+     */
     public function quality(string|int|null $quality): static
     {
         return $this->modify('quality', $quality);
     }
 
-    /** @param 'auto'|string|float|null|array{0: int|float, 1: int|float} $ratio */
-    public function ratio(string|array|float|null $ratio): static
-    {
-        return $this->modify('ratio', ! in_array($ratio, ['auto', ''], true) ? $ratio : null);
-    }
-
-    /** @param 'top'|'top left'|'top right'|'left'|'center'|'right'|'bottom'|'bottom left'|'bottom right'|string|bool|null $crop */
+    /**
+     * @param 'top'|'top left'|'top right'|'left'|'center'|'right'|'bottom'|'bottom left'|'bottom right'|string|bool|null $crop
+     * @deprecated 2.2.0 Use `poster($file, fn (PendingImage $poster) => $poster->crop(...))` instead.
+     */
     public function crop(string|bool|null $crop): static
     {
         return $this->modify('crop', $crop);
@@ -117,6 +128,15 @@ class PendingVideo implements Stringable
         return $this->modify('height', $height);
     }
 
+    /**
+     * @param 'auto'|string|float|null|array{0: int|float, 1: int|float} $ratio
+     * @deprecated 2.2.0 Use `poster($file, fn (PendingImage $poster) => $poster->ratio(...))` instead.
+     */
+    public function ratio(string|array|float|null $ratio): static
+    {
+        return $this->modify('ratio', ! in_array($ratio, ['auto', ''], true) ? $ratio : null);
+    }
+
     public function controls(?bool $controls = true): static
     {
         $this->attributes->set('controls', $controls);
@@ -160,17 +180,17 @@ class PendingVideo implements Stringable
         return $this;
     }
 
-    /** @param 'anonymous'|'use-credentials'|null $crossOrigin */
-    public function crossOrigin(?string $crossOrigin): static
+    public function draggable(?bool $draggable = true): static
     {
-        $this->attributes->set('crossorigin', $crossOrigin);
+        $this->attributes->set('draggable', $draggable);
 
         return $this;
     }
 
-    public function draggable(?bool $draggable = true): static
+    /** @param 'anonymous'|'use-credentials'|null $crossOrigin */
+    public function crossOrigin(?string $crossOrigin): static
     {
-        $this->attributes->set('draggable', $draggable);
+        $this->attributes->set('crossorigin', $crossOrigin);
 
         return $this;
     }
@@ -227,24 +247,8 @@ class PendingVideo implements Stringable
         }
 
         $image = PendingImage::for($this->poster)
-            ->widths(['auto'])
-            ->formats(['auto']);
-
-        if ($this->isModified('preset')) {
-            $image->preset($this->modification('preset'));
-        }
-
-        if ($this->isModified('quality')) {
-            $image->quality($this->modification('quality'));
-        }
-
-        if ($this->isModified('ratio')) {
-            $image->ratio($this->modification('ratio'));
-        }
-
-        if ($this->isModified('crop')) {
-            $image->crop($this->modification('crop'));
-        }
+            ->formats(['auto'])
+            ->widths(['auto']);
 
         if ($this->isModified('width')) {
             $image->width($this->modification('width'));
@@ -254,7 +258,37 @@ class PendingVideo implements Stringable
             $image->height($this->modification('height'));
         }
 
+        $this->applyDeprecatedPosterModifications($image);
+        $this->applyPosterCallback($image);
+
         return $image->generate();
+    }
+
+    /** @deprecated 2.2.0 Applies the poster setters deprecated together with it. */
+    protected function applyDeprecatedPosterModifications(PendingImage $image): void
+    {
+        if ($this->isModified('preset')) {
+            $image->preset($this->modification('preset'));
+        }
+
+        if ($this->isModified('quality')) {
+            $image->quality($this->modification('quality'));
+        }
+
+        if ($this->isModified('crop')) {
+            $image->crop($this->modification('crop'));
+        }
+
+        if ($this->isModified('ratio')) {
+            $image->ratio($this->modification('ratio'));
+        }
+    }
+
+    protected function applyPosterCallback(PendingImage $image): void
+    {
+        if ($this->posterCallback !== null) {
+            ($this->posterCallback)($image);
+        }
     }
 
     protected function optionsFromConfig(): static
@@ -269,7 +303,7 @@ class PendingVideo implements Stringable
     protected function optionsFromProps(array $options): static
     {
         if (isset($options['poster'])) {
-            $this->poster($options['poster']);
+            $this->poster($options['poster'], $options['posterCallback'] ?? null);
         }
 
         if (isset($options['preset'])) {
@@ -278,10 +312,6 @@ class PendingVideo implements Stringable
 
         if (isset($options['quality'])) {
             $this->quality($options['quality']);
-        }
-
-        if (isset($options['ratio'])) {
-            $this->ratio($options['ratio']);
         }
 
         if (isset($options['crop'])) {
@@ -294,6 +324,10 @@ class PendingVideo implements Stringable
 
         if (isset($options['height'])) {
             $this->height($options['height']);
+        }
+
+        if (isset($options['ratio'])) {
+            $this->ratio($options['ratio']);
         }
 
         if (isset($options['attributes'])) {

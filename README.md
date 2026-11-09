@@ -143,36 +143,23 @@ Generates a `<video>` element with the file itself as its `<source>`, plus an op
 Kirby has no way to process video, so unlike `Image`, nothing about the video file itself is ever
 transformed — the poster is the one part that *is* fully generated, and it's worth adding one on every
 video: without it the browser has to guess a first frame to show, and there's no way for the plugin to
-work out the video's own dimensions to prevent layout shift. `preset()`/`quality()`/`ratio()`/`crop()`/
-`width()`/`height()` all configure that poster — the exact same setters `Image` has, since the poster is
-just a `Image` under the hood. **They only have an effect together with `poster()`** — calling any of
-them without also calling `poster()` compiles and chains fine, but there's no poster to apply them to,
-so nothing happens:
+work out the video's own dimensions to prevent layout shift.
+
+Configure the poster in the callback `poster()` takes as its second argument. It receives the poster's
+`PendingImage`, so the whole `Image` API is available there:
 
 ```php
 <?= $page->file('movie.mp4')->toResponsiveVideo()
-    ->poster($page->file('poster.jpg'))
-    ->ratio('16/9')
-    ->crop('top') ?>
+    ->poster($page->file('poster.jpg'), fn (PendingImage $poster) => $poster
+        ->preset('wide')
+        ->ratio('16/9')
+        ->formats(['webp'])
+        ->focus()) ?>
 ```
 
-Since the poster reuses the same setters as `Image`, the options array form works the same way too — recognizing `poster`, `preset`, `quality`, `ratio`, `crop`, `width`, `height` and `attributes`:
-
-```php
-<?= $page->file('movie.mp4')->toResponsiveVideo([
-    'poster' => $page->file('poster.jpg'),
-    'ratio' => '16/9',
-    'crop' => 'top',
-]) ?>
-```
-
-Without an explicit `preset()`/`ratio()`/`width()`/`height()`, the poster defaults to its own natural
-size and format — it does *not* inherit the site-wide `formats`/`widths` from
-[Configuration](#configuration), since those exist for responsive breakpoints the poster doesn't have
-(only its flat `src`/`width`/`height` are ever read, never a `srcset`).
-
-The poster's resolved width/height (after `ratio()`/`crop()`) become the `<video>` tag's own `width`/
-`height` fallback, unless you set them explicitly yourself.
+The `<video>` takes the poster's URL, its `width`/`height` and its `style`, which carries `focus()` as
+`--focus-point`. Without a callback, the poster keeps its natural size and format. `preset()`,
+`quality()`, `crop()` and `ratio()` directly on the video are deprecated since 2.2; use the callback.
 
 Standard `<video>` attributes are available directly:
 
@@ -212,7 +199,7 @@ alongside whatever you add:
 $original = $video->original();
 ?>
 
-<video <?= $attributes ?>>
+<video <?= $attributes->style($video->poster()?->attributes()->get('style')) ?>>
     <?php foreach ($original->formats()->toStructure() as $format): ?>
         <source <?= attr([
             'src' => $format->file()->toFile()?->url(),
@@ -238,6 +225,8 @@ $original = $video->original();
 This is exactly the tradeoff `toResponsiveImage()` never has to make — every image gets format/breakpoint
 negotiation out of the box, because that only ever depends on the file itself. Extra video sources and
 tracks depend on how *your* project models them in content, which the plugin can't know in advance.
+
+Keep the `style()` line: it carries the poster's focus point over to the `<video>`.
 
 ### FAQ
 

@@ -1,3 +1,5 @@
 kirby/
 vendor/
+AGENTS.md
+CLAUDE.md
 composer.lock

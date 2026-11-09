@@ -5,7 +5,7 @@
  */
 ?>
 
-<video <?= $attributes ?>>
+<video <?= $attributes->style($video->poster()?->attributes()->get('style')) ?>>
     <?php foreach ($video->sources() as $source): ?>
         <?= $source ?>
     <?php endforeach ?>

@@ -13,6 +13,18 @@ use Traversable;
 
 class Attributes implements IteratorAggregate, Stringable
 {
+    protected const BOOLEAN_ATTRIBUTES = [
+        'autoplay',
+        'controls',
+        'loop',
+        'muted',
+        'playsinline',
+        'disablepictureinpicture',
+        'disableremoteplayback',
+        'inert',
+        'ismap',
+    ];
+
     protected const TOKEN_LIST_ATTRIBUTES = [
         'class' => ' ',
         'style' => ';',
@@ -22,7 +34,7 @@ class Attributes implements IteratorAggregate, Stringable
         'aria-labelledby' => ' ',
     ];
 
-    protected const TRISTATE_ATTRIBUTES = [
+    protected const TRUE_FALSE_ATTRIBUTES = [
         'draggable',
         'aria-hidden',
     ];
@@ -88,7 +100,8 @@ class Attributes implements IteratorAggregate, Stringable
     {
         $this->data[$name] = match (true) {
             array_key_exists($name, static::TOKEN_LIST_ATTRIBUTES) => static::normalizeTokenListValue($value, static::TOKEN_LIST_ATTRIBUTES[$name]),
-            in_array($name, static::TRISTATE_ATTRIBUTES) => static::normalizeTristateValue($value),
+            in_array($name, static::TRUE_FALSE_ATTRIBUTES) => static::normalizeTrueFalseValue($value),
+            in_array($name, static::BOOLEAN_ATTRIBUTES) => static::normalizeBooleanValue($value),
             default => $value,
         };
 
@@ -98,10 +111,28 @@ class Attributes implements IteratorAggregate, Stringable
     /** @param string|string[] $value */
     public function append(string $name, string|array $value): static
     {
+        $values = array_filter(A::wrap($value));
+
+        if (empty($values)) {
+            return $this;
+        }
+
         return $this->set($name, [
             ...array_filter([$this->get($name)]),
-            ...(array) $value,
+            ...$values,
         ]);
+    }
+
+    /** @param string|array<int|string, mixed>|null $classes */
+    public function class(string|array|null $classes): static
+    {
+        return $this->append('class', static::compileTokens(A::wrap($classes)));
+    }
+
+    /** @param string|array<int|string, mixed>|null $styles */
+    public function style(string|array|null $styles): static
+    {
+        return $this->append('style', static::compileTokens(A::wrap($styles)));
     }
 
     public function merge(self|array $attributes): static
@@ -148,6 +179,25 @@ class Attributes implements IteratorAggregate, Stringable
         return $this->clone()->without(...$names);
     }
 
+    /**
+     * @template TValue
+     * @param TValue $value
+     * @param callable(static, TValue): mixed $callback
+     * @param (callable(static, TValue): mixed)|null $default
+     */
+    public function when(mixed $value, callable $callback, ?callable $default = null): mixed
+    {
+        if ($value) {
+            return $callback($this, $value) ?? $this;
+        }
+
+        if ($default !== null) {
+            return $default($this, $value) ?? $this;
+        }
+
+        return $this;
+    }
+
     public function all(): array
     {
         return $this->data;
@@ -187,14 +237,57 @@ class Attributes implements IteratorAggregate, Stringable
         return $this->set($name, ...$arguments);
     }
 
+    /**
+     * @param array<int|string, mixed> $values
+     * @return string[]
+     */
+    protected static function compileTokens(array $values): array
+    {
+        $tokens = [];
+
+        foreach ($values as $key => $value) {
+            if (is_string($key) && $value) {
+                $tokens[] = $key;
+            } elseif (is_string($value) && trim($value) !== '') {
+                $tokens[] = $value;
+            }
+        }
+
+        return $tokens;
+    }
+
     /** @param string|string[]|null $value */
     protected static function normalizeTokenListValue(string|array|null $value, string $separator): ?string
     {
-        return is_array($value) ? A::join($value, $separator) : $value;
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        $tokens = array_map(fn (string $token) => trim($token, $separator . ' '), $value);
+
+        if (empty($tokens)) {
+            return null;
+        }
+
+        return A::join($tokens, $separator);
     }
 
-    protected static function normalizeTristateValue(?bool $value): ?string
+    protected static function normalizeTrueFalseValue(bool|string|null $value): ?string
     {
-        return $value === null ? null : ($value ? 'true' : 'false');
+        return match ($value) {
+            true => 'true',
+            false => 'false',
+            default => $value,
+        };
+    }
+
+    /** Follows HTML: any present value means `true`, only `false`/`null` drop the attribute. */
+    protected static function normalizeBooleanValue(mixed $value): Closure|true|null
+    {
+        return match (true) {
+            $value instanceof Closure => $value,
+            $value === false, $value === null => null,
+            default => true,
+        };
     }
 }
