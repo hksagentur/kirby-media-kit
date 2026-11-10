@@ -2,6 +2,11 @@
 
 namespace Hks\MediaKit\Html;
 
+use Kirby\Filesystem\F;
+use Kirby\Http\Url;
+use Kirby\Toolkit\Html;
+use Kirby\Toolkit\Str;
+
 class Source extends Element
 {
     public static function factory(array $data): static
@@ -50,5 +55,28 @@ class Source extends Element
     public function height(): ?int
     {
         return $this->attributes->get('height');
+    }
+
+    public function toPreloadLink(array $attributes = []): string
+    {
+        return Html::tag('link', attr: [
+            'rel' => 'preload',
+            'as' => $this->preloadAs(),
+            'type' => $this->type(),
+            'media' => $this->media(),
+            'href' => $this->src(),
+            ...$attributes,
+        ]);
+    }
+
+    protected function preloadAs(): ?string
+    {
+        $type = match (true) {
+            $this->type() !== null => Str::before($this->type(), '/'),
+            $this->src() !== null => F::type(Url::path($this->src())),
+            default => null,
+        };
+
+        return in_array($type, ['image', 'video', 'audio']) ? $type : null;
     }
 }

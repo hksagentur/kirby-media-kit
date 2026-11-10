@@ -13,10 +13,10 @@ use Stringable;
 
 class PendingVideo implements Stringable
 {
-    use HasModifications;
-
     protected File|Asset $video;
+
     protected Attributes $attributes;
+    protected Modifications $modifications;
 
     protected File|Asset|null $poster = null;
 
@@ -31,8 +31,11 @@ class PendingVideo implements Stringable
 
         $this->video = $file;
 
-        $this->optionsFromConfig();
-        $this->optionsFromProps($options);
+        $this->attributes = new Attributes();
+        $this->modifications = new Modifications();
+
+        $this->applyConfig();
+        $this->applyOptions($options);
     }
 
     public static function for(File|Asset $video, array $options = []): static
@@ -62,7 +65,9 @@ class PendingVideo implements Stringable
      */
     public function preset(string|array $preset): static
     {
-        return $this->modify('preset', $preset);
+        $this->modifications->set('preset', $preset);
+
+        return $this;
     }
 
     /**
@@ -71,7 +76,9 @@ class PendingVideo implements Stringable
      */
     public function quality(string|int|null $quality): static
     {
-        return $this->modify('quality', $quality);
+        $this->modifications->set('quality', $quality);
+
+        return $this;
     }
 
     /**
@@ -80,7 +87,20 @@ class PendingVideo implements Stringable
      */
     public function crop(string|bool|null $crop): static
     {
-        return $this->modify('crop', $crop);
+        $this->modifications->set('crop', $crop);
+
+        return $this;
+    }
+
+    /**
+     * @param 'auto'|string|float|null|array{0: int|float, 1: int|float} $ratio
+     * @deprecated 2.2.0 Use `poster($file, fn (PendingImage $poster) => $poster->ratio(...))` instead.
+     */
+    public function ratio(string|array|float|null $ratio): static
+    {
+        $this->modifications->set('ratio', ! in_array($ratio, ['auto', ''], true) ? $ratio : null);
+
+        return $this;
     }
 
     /** @param array<string, mixed> $attributes */
@@ -114,27 +134,41 @@ class PendingVideo implements Stringable
         return $this;
     }
 
+    public function priority(?bool $priority = true): static
+    {
+        $attributes = match ($priority) {
+            true => ['preload' => 'auto'],
+            false => ['preload' => 'metadata'],
+            null => [],
+        };
+
+        foreach ($attributes as $name => $value) {
+            if (! $this->modifications->has($name)) {
+                $this->attributes->set($name, $value);
+            }
+        }
+
+        $this->modifications->set('priority', $priority);
+
+        return $this;
+    }
+
     public function width(?int $width): static
     {
         $this->attributes->set('width', $width);
 
-        return $this->modify('width', $width);
+        $this->modifications->set('width', $width);
+
+        return $this;
     }
 
     public function height(?int $height): static
     {
         $this->attributes->set('height', $height);
 
-        return $this->modify('height', $height);
-    }
+        $this->modifications->set('height', $height);
 
-    /**
-     * @param 'auto'|string|float|null|array{0: int|float, 1: int|float} $ratio
-     * @deprecated 2.2.0 Use `poster($file, fn (PendingImage $poster) => $poster->ratio(...))` instead.
-     */
-    public function ratio(string|array|float|null $ratio): static
-    {
-        return $this->modify('ratio', ! in_array($ratio, ['auto', ''], true) ? $ratio : null);
+        return $this;
     }
 
     public function controls(?bool $controls = true): static
@@ -177,6 +211,8 @@ class PendingVideo implements Stringable
     {
         $this->attributes->set('preload', $preload);
 
+        $this->modifications->set('preload', $preload);
+
         return $this;
     }
 
@@ -204,13 +240,19 @@ class PendingVideo implements Stringable
             'src' => $this->video->url(),
         ]]);
 
-        return new Video($this->video, $poster, $sources, $this->attributes->clone()->mergeIfMissing(
-            $poster === null ? [] : [
-                'poster' => $poster->attributes()->get('src'),
-                'width' => $poster->attributes()->get('width'),
-                'height' => $poster->attributes()->get('height'),
-            ]
-        ));
+        $attributes = $this->attributes->clone()->mergeIfMissing($poster !== null ? [
+            'poster' => $poster->attributes()->get('src'),
+            'width' => $poster->attributes()->get('width'),
+            'height' => $poster->attributes()->get('height'),
+        ] : []);
+
+        return new Video(
+            original: $this->video,
+            poster: $poster,
+            sources: $sources,
+            attributes: $attributes,
+            priority: $this->modifications->get('priority') === true,
+        );
     }
 
     public function html(array $attributes = []): string
@@ -235,7 +277,7 @@ class PendingVideo implements Stringable
 
     public function __call(string $method, array $arguments): static
     {
-        $this->attributes->set(strtolower($method), $arguments === [] ? true : $arguments[0]);
+        $this->attributes->set(strtolower($method), empty($arguments) ? true : $arguments[0]);
 
         return $this;
     }
@@ -250,60 +292,40 @@ class PendingVideo implements Stringable
             ->formats(['auto'])
             ->widths(['auto']);
 
-        if ($this->isModified('width')) {
-            $image->width($this->modification('width'));
+        if ($this->modifications->has('priority')) {
+            $image->priority($this->modifications->get('priority'));
         }
 
-        if ($this->isModified('height')) {
-            $image->height($this->modification('height'));
+        if ($this->modifications->has('width')) {
+            $image->width($this->modifications->get('width'));
         }
 
-        $this->applyDeprecatedPosterModifications($image);
+        if ($this->modifications->has('height')) {
+            $image->height($this->modifications->get('height'));
+        }
+
+        $this->applyPosterModifications($image);
         $this->applyPosterCallback($image);
 
         return $image->generate();
     }
 
-    /** @deprecated 2.2.0 Applies the poster setters deprecated together with it. */
-    protected function applyDeprecatedPosterModifications(PendingImage $image): void
-    {
-        if ($this->isModified('preset')) {
-            $image->preset($this->modification('preset'));
-        }
-
-        if ($this->isModified('quality')) {
-            $image->quality($this->modification('quality'));
-        }
-
-        if ($this->isModified('crop')) {
-            $image->crop($this->modification('crop'));
-        }
-
-        if ($this->isModified('ratio')) {
-            $image->ratio($this->modification('ratio'));
-        }
-    }
-
-    protected function applyPosterCallback(PendingImage $image): void
-    {
-        if ($this->posterCallback !== null) {
-            ($this->posterCallback)($image);
-        }
-    }
-
-    protected function optionsFromConfig(): static
+    protected function applyConfig(): void
     {
         $options = App::instance()->option('hksagentur.media-kit.video', []);
 
-        $this->attributes = Attributes::from($options['attributes'] ?? []);
+        $this->attributes->merge($options['attributes'] ?? []);
 
-        return $this;
     }
 
-    protected function optionsFromProps(array $options): static
+    protected function applyOptions(array $options): void
     {
         if (isset($options['poster'])) {
             $this->poster($options['poster'], $options['posterCallback'] ?? null);
+        }
+
+        if (isset($options['priority'])) {
+            $this->priority($options['priority']);
         }
 
         if (isset($options['preset'])) {
@@ -318,6 +340,10 @@ class PendingVideo implements Stringable
             $this->crop($options['crop']);
         }
 
+        if (isset($options['ratio'])) {
+            $this->ratio($options['ratio']);
+        }
+
         if (isset($options['width'])) {
             $this->width($options['width']);
         }
@@ -326,14 +352,35 @@ class PendingVideo implements Stringable
             $this->height($options['height']);
         }
 
-        if (isset($options['ratio'])) {
-            $this->ratio($options['ratio']);
-        }
-
         if (isset($options['attributes'])) {
             $this->attributes($options['attributes']);
         }
+    }
 
-        return $this;
+    protected function applyPosterCallback(PendingImage $image): void
+    {
+        if ($this->posterCallback !== null) {
+            ($this->posterCallback)($image);
+        }
+    }
+
+    /** @deprecated 2.2.0 Applies the poster setters deprecated together with it. */
+    protected function applyPosterModifications(PendingImage $image): void
+    {
+        if ($this->modifications->has('preset')) {
+            $image->preset($this->modifications->get('preset'));
+        }
+
+        if ($this->modifications->has('quality')) {
+            $image->quality($this->modifications->get('quality'));
+        }
+
+        if ($this->modifications->has('crop')) {
+            $image->crop($this->modifications->get('crop'));
+        }
+
+        if ($this->modifications->has('ratio')) {
+            $image->ratio($this->modifications->get('ratio'));
+        }
     }
 }

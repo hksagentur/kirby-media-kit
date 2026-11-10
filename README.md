@@ -54,7 +54,7 @@ The file method also accepts a preset name directly:
 <?= $page->image()->toResponsiveImage('hero') ?>
 ```
 
-Or, if you'd rather set several things at once without chaining, an options array (recognizing the same keys as the setters — `preset`, `quality`, `formats`, `widths`, `width`, `height`, `ratio`, `crop`, `attributes`):
+Or, if you'd rather set several things at once without chaining, an options array (recognizing the same keys as the setters — `preset`, `quality`, `formats`, `widths`, `width`, `height`, `ratio`, `crop`, `priority`, `attributes`):
 
 ```php
 <?= $page->image()->toResponsiveImage([
@@ -227,6 +227,36 @@ negotiation out of the box, because that only ever depends on the file itself. E
 tracks depend on how *your* project models them in content, which the plugin can't know in advance.
 
 Keep the `style()` line: it carries the poster's focus point over to the `<video>`.
+
+### Key visuals
+
+To preload the media at the top of a page, let blocks implement
+`Hks\MediaKit\Cms\Contracts\HasKeyVisual` and return their media as they render it, and give pages the
+`Hks\MediaKit\Cms\Concerns\HasKeyVisual` trait:
+
+```php
+class HeroBlock extends Block implements HasKeyVisual
+{
+    public function keyVisual(): ?Image
+    {
+        return $this->image()
+            ->toFile()
+            ?->toResponsiveImage()
+            ->priority($this->isAboveTheFold())
+            ->generate();
+    }
+}
+```
+
+```php
+<?= $page->keyVisuals()->toPreloadLinks() ?>
+```
+
+`priority()` marks the page's most important media. On an image it fills `fetchpriority="high"`,
+`loading="eager"` and `decoding="sync"` (with `false`: `loading="lazy"`, `decoding="async"`), on a video
+`preload="auto"` or `"metadata"` and the poster's priority, wherever you haven't set them yourself. Media
+with priority gets a `<link rel="preload">` for exactly the file the block renders. Render the block
+with the same object, e.g. `$block->keyVisual()->toHtml()`.
 
 ### FAQ
 

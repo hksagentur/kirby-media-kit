@@ -46,6 +46,16 @@ class Ratio implements Stringable
         return $this->height;
     }
 
+    public function widthFor(int|float $height): int
+    {
+        return (int) round($height * $this->toFloat());
+    }
+
+    public function heightFor(int|float $width): int
+    {
+        return (int) round($width / $this->toFloat());
+    }
+
     public function toFloat(): float
     {
         return $this->width / $this->height;

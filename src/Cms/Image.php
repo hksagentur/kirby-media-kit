@@ -3,7 +3,9 @@
 namespace Hks\MediaKit\Cms;
 
 use Hks\MediaKit\Html\Attributes;
+use Hks\MediaKit\Html\Source;
 use Hks\MediaKit\Html\Sources;
+use Hks\MediaKit\Toolkit\TokenList;
 use Kirby\Cms\App;
 use Kirby\Cms\File;
 use Kirby\Filesystem\Asset;
@@ -15,22 +17,8 @@ class Image implements Stringable
         protected File|Asset $original,
         protected Sources $sources = new Sources(),
         protected Attributes $attributes = new Attributes(),
+        protected bool $priority = false,
     ) {
-    }
-
-    public function original(): File|Asset
-    {
-        return $this->original;
-    }
-
-    public function hasAttributes(): bool
-    {
-        return $this->attributes->isNotEmpty();
-    }
-
-    public function hasAttribute(string $name): bool
-    {
-        return $this->attributes->has($name);
     }
 
     public function hasSources(): bool
@@ -43,14 +31,34 @@ class Image implements Stringable
         return $this->sources->findBy('type', $type) !== null;
     }
 
-    public function attributes(): Attributes
+    public function hasAttributes(): bool
     {
-        return $this->attributes;
+        return $this->attributes->isNotEmpty();
+    }
+
+    public function hasAttribute(string $name): bool
+    {
+        return $this->attributes->has($name);
+    }
+
+    public function hasPriority(): bool
+    {
+        return $this->priority;
+    }
+
+    public function original(): File|Asset
+    {
+        return $this->original;
     }
 
     public function sources(): Sources
     {
         return $this->sources;
+    }
+
+    public function attributes(): Attributes
+    {
+        return $this->attributes;
     }
 
     public function id(): ?string
@@ -73,11 +81,6 @@ class Image implements Stringable
         return $this->attributes->get('alt');
     }
 
-    public function toArray(): array
-    {
-        return $this->attributes->toArray();
-    }
-
     public function html(array $attributes = []): string
     {
         return $this->render(attributes: $attributes);
@@ -92,6 +95,11 @@ class Image implements Stringable
         ], return: true);
     }
 
+    public function toArray(): array
+    {
+        return $this->attributes->toArray();
+    }
+
     public function toString(): string
     {
         return $this->render();
@@ -102,6 +110,22 @@ class Image implements Stringable
         return $this->render(attributes: $attributes);
     }
 
+    public function toPreloadLink(array $attributes = []): string
+    {
+        $source = $this->sources->first() ?? Source::factory(
+            $this->attributes
+                ->only('src', 'srcset', 'sizes')
+                ->all(),
+        );
+
+        return $source->toPreloadLink([
+            'imagesrcset' => $source->srcset(),
+            'imagesizes' => $this->resolvePreloadSizes($source),
+            ...$this->attributes->only('fetchpriority', 'crossorigin', 'referrerpolicy'),
+            ...$attributes,
+        ]);
+    }
+
     public function __toString(): string
     {
         return $this->render();
@@ -110,5 +134,12 @@ class Image implements Stringable
     public function __call(string $method, array $arguments): mixed
     {
         return $this->original->$method(...$arguments);
+    }
+
+    protected function resolvePreloadSizes(Source $candidate): ?string
+    {
+        return TokenList::commaSeparated($candidate->sizes())
+            ->without('auto')
+            ->value();
     }
 }

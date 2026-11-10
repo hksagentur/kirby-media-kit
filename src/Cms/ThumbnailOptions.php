@@ -23,11 +23,11 @@ class ThumbnailOptions
     {
         $width = $this->width();
 
-        if ($width === null || $this->ratio === null) {
+        if ($width === null) {
             return null;
         }
 
-        return (int) round($width / $this->ratio->toFloat());
+        return $this->ratio?->heightFor($width);
     }
 
     public function ratio(string|array|float|null|Ratio $ratio): static

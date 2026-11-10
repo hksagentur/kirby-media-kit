@@ -3,6 +3,7 @@
 namespace Hks\MediaKit\Cms;
 
 use Hks\MediaKit\Html\Attributes;
+use Hks\MediaKit\Html\Source;
 use Hks\MediaKit\Html\Sources;
 use Kirby\Cms\App;
 use Kirby\Cms\File;
@@ -16,27 +17,13 @@ class Video implements Stringable
         protected ?Image $poster = null,
         protected Sources $sources = new Sources(),
         protected Attributes $attributes = new Attributes(),
+        protected bool $priority = false,
     ) {
     }
 
-    public function original(): File|Asset
+    public function hasPoster(): bool
     {
-        return $this->original;
-    }
-
-    public function poster(): ?Image
-    {
-        return $this->poster;
-    }
-
-    public function hasAttributes(): bool
-    {
-        return $this->attributes->isNotEmpty();
-    }
-
-    public function hasAttribute(string $name): bool
-    {
-        return $this->attributes->has($name);
+        return $this->poster !== null;
     }
 
     public function hasSources(): bool
@@ -49,14 +36,39 @@ class Video implements Stringable
         return $this->sources->findBy('type', $type) !== null;
     }
 
-    public function attributes(): Attributes
+    public function hasAttributes(): bool
     {
-        return $this->attributes;
+        return $this->attributes->isNotEmpty();
+    }
+
+    public function hasAttribute(string $name): bool
+    {
+        return $this->attributes->has($name);
+    }
+
+    public function hasPriority(): bool
+    {
+        return $this->priority;
+    }
+
+    public function original(): File|Asset
+    {
+        return $this->original;
+    }
+
+    public function poster(): ?Image
+    {
+        return $this->poster;
     }
 
     public function sources(): Sources
     {
         return $this->sources;
+    }
+
+    public function attributes(): Attributes
+    {
+        return $this->attributes;
     }
 
     public function id(): ?string
@@ -79,11 +91,6 @@ class Video implements Stringable
         return $this->render(attributes: $attributes);
     }
 
-    public function toArray(): array
-    {
-        return $this->attributes->toArray();
-    }
-
     public function render(array $data = [], array $attributes = []): string
     {
         return App::instance()->snippet('media-kit/video', [
@@ -91,6 +98,11 @@ class Video implements Stringable
             'video' => $this,
             'attributes' => $this->attributes->cloneWith($attributes),
         ], return: true);
+    }
+
+    public function toArray(): array
+    {
+        return $this->attributes->toArray();
     }
 
     public function toString(): string
@@ -101,6 +113,16 @@ class Video implements Stringable
     public function toHtml(array $attributes = []): string
     {
         return $this->render(attributes: $attributes);
+    }
+
+    public function toPreloadLink(array $attributes = []): ?string
+    {
+        return $this->hasPoster() ? Source::factory([
+            'src' => $this->attributes->get('poster'),
+        ])->toPreloadLink([
+            'fetchpriority' => $this->poster->attributes()->get('fetchpriority'),
+            ...$attributes,
+        ]) : null;
     }
 
     public function __toString(): string

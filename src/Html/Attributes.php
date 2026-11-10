@@ -4,6 +4,7 @@ namespace Hks\MediaKit\Html;
 
 use ArrayIterator;
 use Closure;
+use Hks\MediaKit\Toolkit\TokenList;
 use IteratorAggregate;
 use Kirby\Toolkit\A;
 use Kirby\Toolkit\Dom;
@@ -27,7 +28,7 @@ class Attributes implements IteratorAggregate, Stringable
 
     protected const TOKEN_LIST_ATTRIBUTES = [
         'class' => ' ',
-        'style' => ';',
+        'style' => '; ',
         'sizes' => ', ',
         'controlslist' => ' ',
         'aria-describedby' => ' ',
@@ -75,9 +76,19 @@ class Attributes implements IteratorAggregate, Stringable
         return new static($parsed);
     }
 
+    public function isEmpty(): bool
+    {
+        return array_filter($this->data, fn (mixed $value) => $value !== null) === [];
+    }
+
+    public function isNotEmpty(): bool
+    {
+        return ! $this->isEmpty();
+    }
+
     public function has(string $name): bool
     {
-        return array_key_exists($name, $this->data);
+        return ($this->data[$name] ?? null) !== null;
     }
 
     public function missing(string $name): bool
@@ -104,6 +115,15 @@ class Attributes implements IteratorAggregate, Stringable
             in_array($name, static::BOOLEAN_ATTRIBUTES) => static::normalizeBooleanValue($value),
             default => $value,
         };
+
+        return $this;
+    }
+
+    public function remove(string ...$names): static
+    {
+        foreach ($names as $name) {
+            unset($this->data[$name]);
+        }
 
         return $this;
     }
@@ -135,6 +155,14 @@ class Attributes implements IteratorAggregate, Stringable
         return $this->append('style', static::compileTokens(A::wrap($styles)));
     }
 
+    public function only(string ...$names): static
+    {
+        $attributes = $this->clone();
+        $attributes->data = array_intersect_key($this->data, array_flip($names));
+
+        return $attributes;
+    }
+
     public function merge(self|array $attributes): static
     {
         foreach ($attributes as $name => $value) {
@@ -157,11 +185,7 @@ class Attributes implements IteratorAggregate, Stringable
 
     public function without(string ...$names): static
     {
-        foreach ($names as $name) {
-            unset($this->data[$name]);
-        }
-
-        return $this;
+        return $this->clone()->remove(...$names);
     }
 
     public function clone(): static
@@ -174,9 +198,12 @@ class Attributes implements IteratorAggregate, Stringable
         return $this->clone()->merge($attributes);
     }
 
+    /**
+     * @deprecated 2.3.0 Use `without()` instead, which returns a copy since 2.3.0.
+     */
     public function cloneWithout(string ...$names): static
     {
-        return $this->clone()->without(...$names);
+        return $this->without(...$names);
     }
 
     /**
@@ -259,17 +286,7 @@ class Attributes implements IteratorAggregate, Stringable
     /** @param string|string[]|null $value */
     protected static function normalizeTokenListValue(string|array|null $value, string $separator): ?string
     {
-        if (! is_array($value)) {
-            return $value;
-        }
-
-        $tokens = array_map(fn (string $token) => trim($token, $separator . ' '), $value);
-
-        if (empty($tokens)) {
-            return null;
-        }
-
-        return A::join($tokens, $separator);
+        return TokenList::from(A::wrap($value), $separator)->value();
     }
 
     protected static function normalizeTrueFalseValue(bool|string|null $value): ?string
@@ -281,7 +298,6 @@ class Attributes implements IteratorAggregate, Stringable
         };
     }
 
-    /** Follows HTML: any present value means `true`, only `false`/`null` drop the attribute. */
     protected static function normalizeBooleanValue(mixed $value): Closure|true|null
     {
         return match (true) {

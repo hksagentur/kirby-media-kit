@@ -4,6 +4,8 @@ namespace Hks\MediaKit\Cms;
 
 use Hks\MediaKit\Html\Attributes;
 use Hks\MediaKit\Html\Sources;
+use Hks\MediaKit\Toolkit\Ratio;
+use Hks\MediaKit\Toolkit\TokenList;
 use InvalidArgumentException;
 use Kirby\Cms\App;
 use Kirby\Cms\File;
@@ -17,10 +19,10 @@ use Stringable;
 
 class PendingImage implements Stringable
 {
-    use HasModifications;
-
     protected File|Asset $image;
+
     protected Attributes $attributes;
+    protected Modifications $modifications;
 
     /** @var string|array<string, mixed> */
     protected string|array $preset = 'default';
@@ -39,8 +41,11 @@ class PendingImage implements Stringable
 
         $this->image = $file;
 
-        $this->optionsFromConfig();
-        $this->optionsFromProps($options);
+        $this->attributes = new Attributes();
+        $this->modifications = new Modifications();
+
+        $this->applyConfig();
+        $this->applyOptions($options);
     }
 
     public static function for(File|Asset $image, array $options = []): static
@@ -56,49 +61,67 @@ class PendingImage implements Stringable
     /** @param string|array<string, mixed> $preset */
     public function preset(string|array $preset): static
     {
-        return $this->modify('preset', $this->preset = $preset);
-    }
+        $this->modifications->set('preset', $this->preset = $preset);
 
-    /** @param 'auto'|int|null $quality */
-    public function quality(string|int|null $quality): static
-    {
-        return $this->modify('quality', $quality);
+        return $this;
     }
 
     /** @param string[] $formats */
     public function formats(array $formats): static
     {
-        return $this->modify('formats', $this->formats = $formats);
+        $this->modifications->set('formats', $this->formats = $formats);
+
+        return $this;
+    }
+
+    /** @param 'auto'|int|null $quality */
+    public function quality(string|int|null $quality): static
+    {
+        $this->modifications->set('quality', $quality);
+
+        return $this;
     }
 
     /** @param (int|'auto')[] $widths */
     public function widths(array $widths): static
     {
-        return $this->modify('widths', $this->widths = $widths);
+        $this->modifications->set('widths', $this->widths = $widths);
+
+        return $this;
     }
 
     public function width(?int $width): static
     {
         $this->attributes->set('width', $width);
-        return $this->modify('width', $width);
+
+        $this->modifications->set('width', $width);
+
+        return $this;
     }
 
     public function height(?int $height): static
     {
         $this->attributes->set('height', $height);
-        return $this->modify('height', $height);
+
+        $this->modifications->set('height', $height);
+
+        return $this;
     }
 
     /** @param 'auto'|string|float|null|array{0: int|float, 1: int|float} $ratio */
     public function ratio(string|array|float|null $ratio): static
     {
-        return $this->modify('ratio', ! in_array($ratio, ['auto', ''], true) ? $ratio : null);
+        $this->modifications->set('ratio', ! in_array($ratio, ['auto', ''], true) ? $ratio : null);
+
+        return $this;
     }
 
     /** @param 'top'|'top left'|'top right'|'left'|'center'|'right'|'bottom'|'bottom left'|'bottom right'|string|bool|null $crop */
     public function crop(string|bool|null $crop): static
     {
-        return $this->modify('crop', $crop);
+        $this->modifications->set('crop', $crop);
+
+        return $this;
     }
 
     /** @param array<string, mixed> $attributes */
@@ -147,10 +170,39 @@ class PendingImage implements Stringable
         return $this;
     }
 
+    public function priority(?bool $priority = true): static
+    {
+        $attributes = match ($priority) {
+            true => [
+                'fetchpriority' => 'high',
+                'loading' => 'eager',
+                'decoding' => 'sync',
+            ],
+            false => [
+                'fetchpriority' => null,
+                'loading' => 'lazy',
+                'decoding' => 'async',
+            ],
+            null => [],
+        };
+
+        foreach ($attributes as $name => $value) {
+            if (! $this->modifications->has($name)) {
+                $this->attributes->set($name, $value);
+            }
+        }
+
+        $this->modifications->set('priority', $priority);
+
+        return $this;
+    }
+
     /** @param 'auto'|'high'|'low'|null $priority */
     public function fetchPriority(?string $priority): static
     {
         $this->attributes->set('fetchpriority', $priority);
+
+        $this->modifications->set('fetchpriority', $priority);
 
         return $this;
     }
@@ -160,6 +212,8 @@ class PendingImage implements Stringable
     {
         $this->attributes->set('loading', $strategy);
 
+        $this->modifications->set('loading', $strategy);
+
         return $this;
     }
 
@@ -167,6 +221,8 @@ class PendingImage implements Stringable
     public function decoding(?string $strategy): static
     {
         $this->attributes->set('decoding', $strategy);
+
+        $this->modifications->set('decoding', $strategy);
 
         return $this;
     }
@@ -204,34 +260,49 @@ class PendingImage implements Stringable
     public function generate(): Image
     {
         if (! $this->image->isResizable()) {
-            $dimensions = $this->resolveDimensions($this->image->width(), $this->image->height());
+            $dimensions = $this->resolveDimensions(
+                $this->image->width(),
+                $this->image->height()
+            );
 
             $attributes = $this->attributes->clone()->merge($dimensions)->mergeIfMissing([
                 'src' => $this->image->url(),
                 'alt' => $this->image->alt(),
             ])->without('srcset', 'sizes');
 
-            return new Image($this->image, new Sources(), $attributes);
+            return new Image(
+                original: $this->image,
+                sources: new Sources(),
+                attributes: $attributes,
+                priority: $this->modifications->get('priority') === true,
+            );
         }
 
-        $loading = $this->attributes->get('loading');
-
-        $srcset = $this->attributes->get('srcset', fn () => $this->resolveFallbackSrcset());
-        $sizes = $this->attributes->get('sizes', fn () => $this->resolveFallbackSizes($loading));
-
         $thumbnail = $this->generateThumbnail();
+
+        $sizes = $this->resolveSizes();
         $sources = $this->generateSources($sizes);
 
-        $dimensions = $this->resolveDimensions($thumbnail->width(), $thumbnail->height());
+        $dimensions = $this->resolveDimensions(
+            $thumbnail->width(),
+            $thumbnail->height(),
+        );
 
-        $attributes = $this->attributes->clone()->merge($dimensions)->mergeIfMissing([
-            'src' => $thumbnail->url(),
-            'srcset' => $srcset,
+        $attributes = $this->attributes->clone()->merge([
             'sizes' => $sizes,
+            ...$dimensions,
+        ])->mergeIfMissing([
+            'src' => $thumbnail->url(),
+            'srcset' => $this->attributes->get('srcset', $this->resolveFallbackSrcset(...)),
             'alt' => $this->image->alt(),
         ]);
 
-        return new Image($this->image, $sources, $attributes);
+        return new Image(
+            original: $this->image,
+            sources: $sources,
+            attributes: $attributes,
+            priority: $this->modifications->get('priority') === true
+        );
     }
 
     public function html(array $attributes = []): string
@@ -264,19 +335,24 @@ class PendingImage implements Stringable
     /** @param 'jpeg'|'png'|'avif'|'webp' $format */
     protected function generateSrcset(string $format): ?string
     {
-        $sizes = $this->resolveSizes($format);
+        $options = $this->resolveSrcsetOptions($format)
+            ->filter(fn (ThumbnailOptions $options) => $options->fits(
+                $this->image->width(),
+                $this->image->height(),
+            ))
+            ->toArray(fn (ThumbnailOptions $options) => $options->toArray());
 
-        if ($sizes === []) {
+        if ($options === []) {
             return null;
         }
 
-        return $this->image->srcset($sizes);
+        return $this->image->srcset($options);
     }
 
     protected function generateThumbnail(): File|FileVersion|Asset
     {
         $format = $this->resolveFallbackFormat();
-        $options = $this->resolveThumbOptions($format);
+        $options = $this->resolveThumbnailOptions($format);
 
         return $this->image->thumb($options->toArray());
     }
@@ -298,16 +374,13 @@ class PendingImage implements Stringable
         return Sources::factory($items);
     }
 
-    /**
-     * @param array<string, mixed> $default
-     * @return array<string, mixed>
-     */
-    protected function loadPreset(string $name, array $default = []): array
+    /** @return array<string, mixed> */
+    protected function loadPreset(string $name): array
     {
         $options = App::instance()->option("thumbs.presets.{$name}")
             ?? App::instance()->option('thumbs.presets.default');
 
-        return is_array($options) ? $options : $default;
+        return is_array($options) ? $options : [];
     }
 
     /**
@@ -329,7 +402,7 @@ class PendingImage implements Stringable
 
     protected function usesSrcsetPreset(): bool
     {
-        return $this->usesNamedPreset() && ! $this->isModified('widths');
+        return $this->usesNamedPreset() && ! $this->modifications->has('widths');
     }
 
     /** @return array<string, mixed> */
@@ -364,10 +437,32 @@ class PendingImage implements Stringable
         return $widths;
     }
 
+    /**
+     * @return array{width: int|string|null, height: int|string|null}
+     */
+    protected function resolveDimensions(int $width, int $height): array
+    {
+        $explicitWidth = $this->attributes->get('width');
+        $explicitHeight = $this->attributes->get('height');
+
+        $ratio = $width > 0 && $height > 0 ? Ratio::from([$width, $height]) : null;
+
+        if ($ratio && is_numeric($explicitWidth) && $explicitHeight === null) {
+            $explicitHeight = $ratio->heightFor((float) $explicitWidth);
+        } elseif ($ratio && is_numeric($explicitHeight) && $explicitWidth === null) {
+            $explicitWidth = $ratio->widthFor((float) $explicitHeight);
+        }
+
+        return [
+            'width' => $explicitWidth ?? ($width ?: null),
+            'height' => $explicitHeight ?? ($height ?: null),
+        ];
+    }
+
     /** @param 'jpeg'|'png'|'avif'|'webp' $format */
     protected function resolveQuality(string $format): ?int
     {
-        $quality = $this->modification('quality');
+        $quality = $this->modifications->get('quality');
 
         if ($quality === null) {
             return null;
@@ -386,8 +481,15 @@ class PendingImage implements Stringable
         };
     }
 
+    protected function resolveSizes(): string
+    {
+        return TokenList::commaSeparated($this->attributes->get('sizes') ?? 'auto')
+            ->when($this->attributes->get('loading') !== 'lazy', fn (TokenList $sizes) => $sizes->without('auto'))
+            ->valueOr('100vw');
+    }
+
     /** @return Collection<array<string, mixed>> */
-    protected function resolveSrcsets(): Collection
+    protected function resolveSrcsetEntries(): Collection
     {
         $options = [];
 
@@ -402,69 +504,36 @@ class PendingImage implements Stringable
         return (new Collection($srcsets))->filter(is_array(...));
     }
 
-    /** @return array<string, array<string, mixed>> */
-    protected function resolveSizes(string $format): array
-    {
-        return $this->resolveSrcsetOptions($format)
-            ->filter(fn (ThumbnailOptions $options) => $options->fits(
-                $this->image->width(),
-                $this->image->height(),
-            ))
-            ->toArray(fn (ThumbnailOptions $options) => $options->toArray());
-    }
-
     /**
      * @param 'jpeg'|'png'|'avif'|'webp' $format
      * @return Collection<ThumbnailOptions>
      */
     protected function resolveSrcsetOptions(string $format): Collection
     {
-        return $this->resolveSrcsets()->map(function (array $options) use ($format) {
+        return $this->resolveSrcsetEntries()->map(function (array $options) use ($format) {
             return (new ThumbnailOptions($this->usesNamedPreset() ? $options : $this->preset))
                 ->merge([
                     'format' => $format,
                     'width' => $options['width'] ?? $this->resolveFallbackWidth(),
                     'quality' => $this->resolveQuality($format),
                 ])
-                ->ratio($this->modification('ratio'))
-                ->crop($this->modification('crop'));
+                ->ratio($this->modifications->get('ratio'))
+                ->crop($this->modifications->get('crop'));
         });
     }
 
     /** @param 'jpeg'|'png'|'avif'|'webp' $format */
-    protected function resolveThumbOptions(string $format): ThumbnailOptions
+    protected function resolveThumbnailOptions(string $format): ThumbnailOptions
     {
         return (new ThumbnailOptions(['width' => $this->resolveFallbackWidth(), ...$this->resolvePreset()]))
             ->merge([
                 'format' => $format,
-                'width' => $this->modification('width'),
-                'height' => $this->modification('height'),
+                'width' => $this->modifications->get('width'),
+                'height' => $this->modifications->get('height'),
                 'quality' => $this->resolveQuality($format),
             ])
-            ->ratio($this->modification('ratio'))
-            ->crop($this->modification('crop'));
-    }
-
-    /**
-     * @return array{width: int|string|null, height: int|string|null}
-     */
-    protected function resolveDimensions(int $width, int $height): array
-    {
-        $explicitWidth = $this->attributes->get('width');
-        $explicitHeight = $this->attributes->get('height');
-
-        $ratio = $width > 0 && $height > 0 ? $width / $height : null;
-
-        if ($ratio && is_numeric($explicitWidth) && $explicitHeight === null) {
-            $explicitHeight = (int) round($explicitWidth / $ratio);
-        } elseif ($ratio && is_numeric($explicitHeight) && $explicitWidth === null) {
-            $explicitWidth = (int) round($explicitHeight * $ratio);
-        }
-
-        return [
-            'width' => $explicitWidth ?? ($width ?: null),
-            'height' => $explicitHeight ?? ($height ?: null),
-        ];
+            ->ratio($this->modifications->get('ratio'))
+            ->crop($this->modifications->get('crop'));
     }
 
     /** @return 'jpeg'|'png'|'avif'|'webp' */
@@ -483,36 +552,32 @@ class PendingImage implements Stringable
         return $this->generateSrcset($this->resolveFallbackFormat());
     }
 
-    /** @return 'auto'|'100vw' */
-    protected function resolveFallbackSizes(?string $loading): string
-    {
-        return $loading === 'lazy' ? 'auto' : '100vw';
-    }
-
-    protected function optionsFromConfig(): static
+    protected function applyConfig(): void
     {
         $options = App::instance()->option('hksagentur.media-kit.image', []);
 
         $this->formats = $options['formats'] ?? ['jpeg'];
         $this->widths = $options['widths'] ?? ['auto'];
 
-        $this->attributes = Attributes::from($options['attributes'] ?? []);
-
-        return $this;
+        $this->attributes->merge($options['attributes'] ?? []);
     }
 
-    protected function optionsFromProps(array $options): static
+    protected function applyOptions(array $options): void
     {
         if (isset($options['preset'])) {
             $this->preset($options['preset']);
+        }
+
+        if (isset($options['formats'])) {
+            $this->formats($options['formats']);
         }
 
         if (isset($options['quality'])) {
             $this->quality($options['quality']);
         }
 
-        if (isset($options['formats'])) {
-            $this->formats($options['formats']);
+        if (isset($options['priority'])) {
+            $this->priority($options['priority']);
         }
 
         if (isset($options['widths'])) {
@@ -538,7 +603,5 @@ class PendingImage implements Stringable
         if (isset($options['attributes'])) {
             $this->attributes($options['attributes']);
         }
-
-        return $this;
     }
 }
